@@ -1,0 +1,60 @@
+{
+  "name": "hitoiki",
+  "version": "0.0.0",
+  "description": "Run heavy work on the main thread without blocking the UI: write it as a generator, run it synchronously or in time slices.",
+  "keywords": [
+    "INP",
+    "cooperative-multitasking",
+    "coroutine",
+    "generator",
+    "main-thread",
+    "non-blocking",
+    "requestIdleCallback",
+    "scheduler",
+    "scheduler.postTask",
+    "time-slicing"
+  ],
+  "homepage": "https://github.com/mineoka-kento/hitoiki#readme",
+  "bugs": {
+    "url": "https://github.com/mineoka-kento/hitoiki/issues"
+  },
+  "license": "MIT",
+  "author": "KENTO Mineoka <costeka7@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mineoka-kento/hitoiki.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build",
+    "prepare": "vp config"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "bumpp": "^12.3.0",
+    "typescript": "^7.0.2",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.14.0",
+      "onFail": "download"
+    }
+  }
+}
