@@ -1,6 +1,6 @@
 {
   "name": "hitoiki",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Run heavy work on the main thread without blocking the UI: write it as a generator, run it synchronously or in time slices.",
   "keywords": [
     "INP",
