@@ -42,7 +42,8 @@
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build",
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "publish": "pnpm exec bumpp --commit \"Release v%s\""
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
