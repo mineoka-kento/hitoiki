@@ -1,0 +1,71 @@
+name: Publish
+
+# Publishes the package to npm with trusted publishing (OIDC): no npm token is stored
+# in this repository. Push a tag that matches the version in package.json to release,
+# e.g. `pnpm exec bumpp`, which bumps the version, commits, tags and pushes.
+#
+# One-time setup on npmjs.com (package settings → Trusted publishing → GitHub Actions):
+#   Organization or user: mineoka-kento
+#   Repository:           hitoiki
+#   Workflow filename:    publish.yml
+#   Environment name:     npm
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest # trusted publishing does not support self-hosted runners
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # lets npm verify that this workflow is publishing
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          node-version: "24" # trusted publishing needs Node.js 22.14 or later
+          cache: true
+          run-install: true
+
+      - name: Check that the tag matches package.json
+        id: version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the version in package.json ($version)."
+            exit 1
+          fi
+          # Pre-releases (e.g. 1.0.0-beta.1) must not become the default "latest" version.
+          case "$version" in
+            *-*) echo "dist-tag=next" >> "$GITHUB_OUTPUT" ;;
+            *) echo "dist-tag=latest" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Check
+        run: vp check
+
+      - name: Test
+        run: vp test
+
+      # `prepublishOnly` builds the package. Git checks are skipped because a tag is
+      # checked out (detached HEAD), not the main branch. Provenance is attached
+      # automatically for a public repository.
+      - name: Publish
+        run: vp pm publish --no-git-checks --tag "$DIST_TAG"
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist-tag }}
