@@ -1,3 +1,7 @@
+# 使用言語
+
+日本語でレビューしてください。
+
 <!--VITE PLUS START-->
 
 # Using Vite+, the Unified Toolchain for the Web
