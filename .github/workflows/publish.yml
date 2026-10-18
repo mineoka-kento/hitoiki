@@ -1,14 +1,24 @@
 name: Publish
 
-# Publishes the package to npm with trusted publishing (OIDC): no npm token is stored
-# in this repository. Push a tag that matches the version in package.json to release,
-# e.g. `pnpm exec bumpp`, which bumps the version, commits, tags and pushes.
+# Releases the package when a tag matching the version in package.json is pushed,
+# e.g. with `pnpm exec bumpp`, which bumps the version, commits, tags and pushes.
+#
+# 1. `publish` builds the package once and stages that tarball on npm with trusted
+#    publishing (OIDC): no npm token is stored in this repository. The staged version
+#    goes live only after a maintainer approves it with 2FA:
+#      vp pm stage list                  # find the stage ID
+#      vp pm stage approve <stage-id>    # publish it (2FA)
+#      vp pm stage reject <stage-id>     # or discard it (2FA)
+# 2. `release` creates the GitHub Release as soon as staging succeeds, with generated
+#    notes and the same tarball attached. If the staged version is rejected, delete the
+#    release: gh release delete <tag> --cleanup-tag
 #
 # One-time setup on npmjs.com (package settings → Trusted publishing → GitHub Actions):
 #   Organization or user: mineoka-kento
 #   Repository:           hitoiki
 #   Workflow filename:    publish.yml
 #   Environment name:     npm
+#   Allowed actions:      none needed (`npm stage publish` is always allowed)
 
 on:
   push:
@@ -29,6 +39,8 @@ jobs:
     permissions:
       contents: read
       id-token: write # lets npm verify that this workflow is publishing
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -52,8 +64,8 @@ jobs:
           fi
           # Pre-releases (e.g. 1.0.0-beta.1) must not become the default "latest" version.
           case "$version" in
-            *-*) echo "dist-tag=next" >> "$GITHUB_OUTPUT" ;;
-            *) echo "dist-tag=latest" >> "$GITHUB_OUTPUT" ;;
+            *-*) printf 'prerelease=true\ndist-tag=next\n' >> "$GITHUB_OUTPUT" ;;
+            *) printf 'prerelease=false\ndist-tag=latest\n' >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Check
@@ -62,10 +74,52 @@ jobs:
       - name: Test
         run: vp test
 
-      # `prepublishOnly` builds the package. Git checks are skipped because a tag is
-      # checked out (detached HEAD), not the main branch. Provenance is attached
-      # automatically for a public repository.
-      - name: Publish
-        run: vp pm publish --no-git-checks --tag "$DIST_TAG"
+      # Build and pack once, so that npm and the GitHub Release get the very same file.
+      - name: Build and pack
+        run: |
+          vp pack
+          mkdir -p "$RUNNER_TEMP/package"
+          vp pm pack --pack-destination "$RUNNER_TEMP/package"
+
+      # Git checks are skipped because a tag is checked out (detached HEAD), not the main
+      # branch. Provenance is attached automatically for a public repository.
+      - name: Stage for publishing
+        run: vp pm stage publish "$RUNNER_TEMP"/package/*.tgz --tag "$DIST_TAG" -- --no-git-checks
         env:
           DIST_TAG: ${{ steps.version.outputs.dist-tag }}
+
+      - name: Keep the tarball for the release
+        uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: ${{ runner.temp }}/package/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - name: Download the tarball
+        uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: package
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.publish.outputs.prerelease }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "The release $TAG already exists."
+            exit 0
+          fi
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" package/*.tgz \
+            --verify-tag --generate-notes --title "$TAG" "${flags[@]}"
